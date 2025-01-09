@@ -1,64 +1,89 @@
-stages:
-  - build
-  - test
-  - measure
-  - document
-  - secure
-  - deploy
+name: Go CI/CD Pipeline
 
-variables:
-  GOPROXY: "https://proxy.golang.org" # Cache Go modules
-  GOBIN: "$CI_PROJECT_DIR/bin"
+on:
+  push:
+    branches:
+      - main
 
-# Étape 1: Build
-build:
-  stage: build
-  image: golang:1.20
-  script:
-    - go mod tidy
-    - go build -o myapp
-  artifacts:
-    paths:
-      - myapp
-  only:
-    - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-# Étape 2: Test
-test:
-  stage: test
-  image: golang:1.20
-  script:
-    - go test ./... -v
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.20
 
-# Étape 3: Measure (Lint et qualité)
-measure:
-  stage: measure
-  image: golangci/golangci-lint:v1.54
-  script:
-    - golangci-lint run --timeout 5m
+      - name: Install dependencies
+        run: go mod tidy
 
-# Étape 4: Document
-document:
-  stage: document
-  image: golang:1.20
-  script:
-    - go install golang.org/x/tools/cmd/godoc@latest
-    - godoc -http=:6060 &
-    - echo "Documentation is generated."
+      - name: Build
+        run: go build -o myapp
 
-# Étape 5: Secure (Analyse de sécurité)
-secure:
-  stage: secure
-  image: securego/gosec
-  script:
-    - gosec ./...
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-# Étape 6: Deploy
-deploy:
-  stage: deploy
-  image: alpine:latest
-  script:
-    - echo "Deploying to production..."
-    - echo "Here you could use Docker, SCP, or any other deployment tool."
-  only:
-    - main
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.20
+
+      - name: Run tests
+        run: go test ./... -v
+
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install GolangCI-Lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.54.2
+          ./bin/golangci-lint run
+
+  document:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Generate Documentation
+        run: |
+          go install golang.org/x/tools/cmd/godoc@latest
+          godoc -http=:6060 &
+
+  secure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run GoSec Security Checks
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./...
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          tags: ${{ secrets.DOCKER_USERNAME }}/myapp:latest
