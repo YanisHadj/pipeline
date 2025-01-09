@@ -1,36 +1,64 @@
-# This is a basic workflow to help you get started with Actions
+stages:
+  - build
+  - test
+  - measure
+  - document
+  - secure
+  - deploy
 
-name: CI
+variables:
+  GOPROXY: "https://proxy.golang.org" # Cache Go modules
+  GOBIN: "$CI_PROJECT_DIR/bin"
 
-# Controls when the workflow will run
-on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+# Étape 1: Build
+build:
+  stage: build
+  image: golang:1.20
+  script:
+    - go mod tidy
+    - go build -o myapp
+  artifacts:
+    paths:
+      - myapp
+  only:
+    - main
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+# Étape 2: Test
+test:
+  stage: test
+  image: golang:1.20
+  script:
+    - go test ./... -v
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+# Étape 3: Measure (Lint et qualité)
+measure:
+  stage: measure
+  image: golangci/golangci-lint:v1.54
+  script:
+    - golangci-lint run --timeout 5m
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+# Étape 4: Document
+document:
+  stage: document
+  image: golang:1.20
+  script:
+    - go install golang.org/x/tools/cmd/godoc@latest
+    - godoc -http=:6060 &
+    - echo "Documentation is generated."
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+# Étape 5: Secure (Analyse de sécurité)
+secure:
+  stage: secure
+  image: securego/gosec
+  script:
+    - gosec ./...
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+# Étape 6: Deploy
+deploy:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deploying to production..."
+    - echo "Here you could use Docker, SCP, or any other deployment tool."
+  only:
+    - main
